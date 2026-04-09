@@ -6,6 +6,8 @@ datasource db {
   provider = "postgresql"
 }
 
+// ── Enums ──────────────────────────────────────────────
+
 enum OrganizationType {
   ASSISTED_LIVING
   MEMORY_CARE
@@ -18,6 +20,42 @@ enum UserRole {
   BILLING_MANAGER
   VIEWER
 }
+
+enum CareLevel {
+  LEVEL_1
+  LEVEL_2
+  LEVEL_3
+  LEVEL_4
+  MEMORY_CARE
+}
+
+enum PaymentType {
+  PRIVATE_PAY
+  MEDICAID_WAIVER
+  MIXED
+}
+
+enum ResidentStatus {
+  ACTIVE
+  DISCHARGED
+  DECEASED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  PARTIAL
+}
+
+enum MismatchStatus {
+  DETECTED
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+// ── Organization & Facility ────────────────────────────
 
 model Organization {
   id        String           @id @default(cuid())
@@ -38,7 +76,12 @@ model Facility {
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+
+  residents        Resident[]
+  revenueMismatches RevenueMismatch[]
 }
+
+// ── Users ──────────────────────────────────────────────
 
 model User {
   id           String   @id @default(cuid())
@@ -49,4 +92,80 @@ model User {
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+// ── Residents & Care ───────────────────────────────────
+
+model Resident {
+  id            String         @id @default(cuid())
+  firstName     String
+  lastName      String
+  roomNumber    String
+  admissionDate DateTime
+  careLevel     CareLevel
+  monthlyRate   Decimal        @db.Decimal(10, 2)
+  paymentType   PaymentType
+  status        ResidentStatus @default(ACTIVE)
+
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id])
+
+  carePlanChanges   CarePlanChange[]
+  billingRecords    BillingRecord[]
+  revenueMismatches RevenueMismatch[]
+}
+
+model CarePlanChange {
+  id            String    @id @default(cuid())
+  previousLevel CareLevel
+  newLevel      CareLevel
+  effectiveDate DateTime
+  documentedBy  String
+  createdAt     DateTime  @default(now())
+
+  residentId String
+  resident   Resident @relation(fields: [residentId], references: [id])
+
+  revenueMismatches RevenueMismatch[]
+}
+
+// ── Billing ────────────────────────────────────────────
+
+model BillingRecord {
+  id            String        @id @default(cuid())
+  billingMonth  DateTime
+  careLevel     CareLevel
+  amountBilled  Decimal       @db.Decimal(10, 2)
+  amountPaid    Decimal       @db.Decimal(10, 2) @default(0)
+  paymentStatus PaymentStatus @default(PENDING)
+  dueDate       DateTime
+  paidDate      DateTime?
+
+  residentId String
+  resident   Resident @relation(fields: [residentId], references: [id])
+
+  revenueMismatches RevenueMismatch[]
+}
+
+// ── Revenue Mismatch Detection ─────────────────────────
+
+model RevenueMismatch {
+  id           String         @id @default(cuid())
+  expectedRate Decimal        @db.Decimal(10, 2)
+  actualRate   Decimal        @db.Decimal(10, 2)
+  monthlyGap   Decimal        @db.Decimal(10, 2)
+  status       MismatchStatus @default(DETECTED)
+  detectedAt   DateTime       @default(now())
+
+  residentId      String
+  resident        Resident @relation(fields: [residentId], references: [id])
+
+  facilityId      String
+  facility        Facility @relation(fields: [facilityId], references: [id])
+
+  carePlanChangeId String
+  carePlanChange   CarePlanChange @relation(fields: [carePlanChangeId], references: [id])
+
+  billingRecordId  String
+  billingRecord    BillingRecord @relation(fields: [billingRecordId], references: [id])
 }
