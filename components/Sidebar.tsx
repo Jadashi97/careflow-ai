@@ -13,6 +13,7 @@ const navItems = [
   { label: "Leakage", href: "/dashboard/leakage", icon: "🔍" },
   { label: "AR Tracker", href: "/dashboard/ar", icon: "📋" },
   { label: "Communications", href: "/dashboard/communications", icon: "✉️" },
+  { label: "Food Waste", href: "/dashboard/food-waste", icon: "🍽️" },
   { label: "Upload", href: "/dashboard/upload", icon: "📤" },
   { label: "Reports", href: "/dashboard/reports", icon: "📊" },
   { label: "Settings", href: "/dashboard/settings", icon: "⚙️" },

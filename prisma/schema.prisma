@@ -101,6 +101,7 @@ model Facility {
 
   residents        Resident[]
   revenueMismatches RevenueMismatch[]
+  mealLogs         MealLog[]
 }
 
 // ── Users ──────────────────────────────────────────────
@@ -310,4 +311,31 @@ model CommunicationSchedule {
 
   ruleId      String?
   rule        ReminderRule?  @relation(fields: [ruleId], references: [id])
+}
+
+// ── Food Waste Tracking ────────────────────────────────
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+}
+
+model MealLog {
+  id            String   @id @default(cuid())
+  date          DateTime @db.Date
+  mealType      MealType
+  mealsPrepped  Int
+  mealsServed   Int
+  mealsWasted   Int
+  costPerMeal   Decimal  @db.Decimal(10, 2) @default(8.00)
+  dietaryNotes  String?
+  loggedBy      String
+  createdAt     DateTime @default(now())
+
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id])
+
+  @@index([facilityId, date])
+  @@index([date, mealType])
 }

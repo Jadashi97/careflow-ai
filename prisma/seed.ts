@@ -73,6 +73,7 @@ const CARE_STAFF = [
 
 async function main() {
   console.log("Cleaning existing data...");
+  await prisma.mealLog.deleteMany();
   await prisma.communicationSchedule.deleteMany();
   await prisma.communicationLog.deleteMany();
   await prisma.familyPortalToken.deleteMany();
@@ -532,6 +533,104 @@ async function main() {
     });
   }
 
+  // ── Meal Logs (90 days) ─────────────────────────────
+
+  console.log("Creating 90 days of meal logs across all facilities...");
+
+  const KITCHEN_STAFF = [
+    "Chef Maria Lopez", "Sous Chef Tom Walker", "Kitchen Lead Ana Reyes",
+    "Chef David Park", "Pastry Chef Liz Chen", "Kitchen Mgr Carlos Diaz",
+  ];
+
+  const mealTypes: Array<"BREAKFAST" | "LUNCH" | "DINNER"> = ["BREAKFAST", "LUNCH", "DINNER"];
+
+  // Per-meal occupancy multipliers (residents typically attend at varying rates)
+  const ATTENDANCE_RATE: Record<string, number> = {
+    BREAKFAST: 0.88, // some skip breakfast
+    LUNCH: 0.94,     // most attend
+    DINNER: 0.91,    // some out with family
+  };
+
+  // Per-meal prep buffer (kitchen always preps a buffer above expected attendance)
+  const PREP_BUFFER: Record<string, number> = {
+    BREAKFAST: 1.10,
+    LUNCH: 1.15,
+    DINNER: 1.18,
+  };
+
+  // Day-of-week consumption modifier (Sun=0..Sat=6)
+  const DOW_MULTIPLIER = [0.92, 0.95, 0.97, 1.0, 1.02, 1.0, 0.96];
+
+  // Cost per meal varies slightly by meal type
+  const COST_PER_MEAL: Record<string, number> = {
+    BREAKFAST: 6.50,
+    LUNCH: 8.50,
+    DINNER: 9.00,
+  };
+
+  const dietaryNotes = [
+    "Standard, low-sodium, diabetic-friendly options",
+    "Pureed and soft-food options included",
+    "Gluten-free menu available",
+    "Vegetarian alternatives offered",
+    "Texture-modified portions for dysphagia",
+    "Diabetic-friendly with sugar-free dessert",
+    null,
+    null,
+  ];
+
+  // Re-fetch facilities so we have current occupancy set after resident creation
+  const seededFacilities = await prisma.facility.findMany({
+    where: { organizationId: org.id },
+  });
+
+  let totalMealLogs = 0;
+  for (const facility of seededFacilities) {
+    for (let dayOffset = 89; dayOffset >= 0; dayOffset--) {
+      const date = daysAgo(dayOffset);
+      const dow = date.getDay();
+      const dowMod = DOW_MULTIPLIER[dow];
+
+      for (const mealType of mealTypes) {
+        const expectedDiners = facility.currentOccupancy * ATTENDANCE_RATE[mealType] * dowMod;
+        const prepBase = expectedDiners * PREP_BUFFER[mealType];
+        const mealsPrepped = Math.round(prepBase + randomInt(-3, 4));
+
+        // Most days waste is 5-15%, occasional bad days hit 22-30%
+        const wasteEvent = Math.random();
+        let wastePct: number;
+        if (wasteEvent < 0.08) {
+          // ~8% chance of high-waste day (alert trigger)
+          wastePct = randomInt(20, 32) / 100;
+        } else if (wasteEvent < 0.20) {
+          // ~12% chance of medium waste
+          wastePct = randomInt(14, 19) / 100;
+        } else {
+          // Normal day
+          wastePct = randomInt(4, 13) / 100;
+        }
+
+        const mealsWasted = Math.max(0, Math.round(mealsPrepped * wastePct));
+        const mealsServed = Math.max(0, mealsPrepped - mealsWasted);
+
+        await prisma.mealLog.create({
+          data: {
+            facilityId: facility.id,
+            date,
+            mealType,
+            mealsPrepped,
+            mealsServed,
+            mealsWasted,
+            costPerMeal: COST_PER_MEAL[mealType],
+            dietaryNotes: randomItem(dietaryNotes),
+            loggedBy: randomItem(KITCHEN_STAFF),
+          },
+        });
+        totalMealLogs++;
+      }
+    }
+  }
+
   // ── Summary ────────────────────────────────────────
 
   const totalResidents = await prisma.resident.count();
@@ -552,6 +651,7 @@ async function main() {
   console.log(`   Communication logs:  ${totalComms}`);
   console.log(`   Email templates:     ${totalTemplates}`);
   console.log(`   Family portal tokens: ${totalTokens}`);
+  console.log(`   Meal logs (90 days): ${totalMealLogs}`);
   console.log(`\n   Login: admin@sunrisecare.com / admin123`);
   console.log(`   Sample portal: /family/${familyTokens[0]}`);
 }
