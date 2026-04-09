@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  const totalRevenueThisMonth = thisMonthBilling.reduce(
+  const totalCollectedThisMonth = thisMonthBilling.reduce(
     (sum, b) => sum + Number(b.amountPaid), 0
   );
   const totalBilledThisMonth = thisMonthBilling.reduce(
@@ -68,8 +68,8 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  const totalRevenueLastMonth = lastMonthBilling.reduce(
-    (sum, b) => sum + Number(b.amountPaid), 0
+  const totalBilledLastMonth = lastMonthBilling.reduce(
+    (sum, b) => sum + Number(b.amountBilled), 0
   );
 
   // ── AR Outstanding ──────────────────────────────────
@@ -274,16 +274,17 @@ export async function GET(req: NextRequest) {
     where: { status: "PENDING" },
   });
 
-  // Revenue change vs last month
-  const revenueChange = totalRevenueLastMonth > 0
-    ? Math.round(((totalRevenueThisMonth - totalRevenueLastMonth) / totalRevenueLastMonth) * 1000) / 10
+  // Revenue change vs last month (billed, since current month hasn't been collected yet)
+  const revenueChange = totalBilledLastMonth > 0
+    ? Math.round(((totalBilledThisMonth - totalBilledLastMonth) / totalBilledLastMonth) * 1000) / 10
     : 0;
 
   return NextResponse.json({
     kpis: {
-      totalRevenueThisMonth,
+      totalRevenueThisMonth: totalBilledThisMonth,
       totalBilledThisMonth,
-      totalRevenueLastMonth,
+      totalCollectedThisMonth,
+      totalBilledLastMonth,
       revenueChange,
       totalAROutstanding,
       occupancyRate,

@@ -6,7 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import type { ExtendedUser } from "@/lib/types";
 
 const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: "🏠" },
+  { label: "Overview", href: "/dashboard/overview", icon: "📈" },
   { label: "Facilities", href: "/dashboard/facilities", icon: "🏥" },
   { label: "Residents", href: "/dashboard/residents", icon: "👥" },
   { label: "Billing", href: "/dashboard/billing", icon: "💰" },
