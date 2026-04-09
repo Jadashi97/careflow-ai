@@ -79,7 +79,7 @@ export default function LeakageDashboard() {
     const res = await fetch(`/api/leakage?${params.toString()}`);
     const data = await res.json();
     setMismatches(data.mismatches || []);
-    setStats(data.stats || stats);
+    setStats((s) => data.stats || s);
     setByFacility(data.byFacility || []);
     setTrend(data.trend || []);
     setFacilities(data.facilities || []);
