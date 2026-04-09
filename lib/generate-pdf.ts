@@ -346,6 +346,7 @@ function ReportDocument({ data }: { data: ExportData }) {
 }
 
 export async function generateLeakagePDF(data: ExportData): Promise<Blob> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const doc = createElement(ReportDocument, { data }) as any;
   return await pdf(doc).toBlob();
 }

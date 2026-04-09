@@ -2,6 +2,7 @@ import "dotenv/config";
 import { PrismaClient, CareLevel, PaymentType, ResidentStatus, PaymentStatus } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 // Prisma accepts plain numbers for Decimal fields in create/update
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -72,7 +73,10 @@ const CARE_STAFF = [
 
 async function main() {
   console.log("Cleaning existing data...");
+  await prisma.communicationSchedule.deleteMany();
   await prisma.communicationLog.deleteMany();
+  await prisma.familyPortalToken.deleteMany();
+  await prisma.emailTemplate.deleteMany();
   await prisma.reminderRule.deleteMany();
   await prisma.revenueMismatch.deleteMany();
   await prisma.billingRecord.deleteMany();
@@ -446,6 +450,88 @@ async function main() {
     }
   }
 
+  // ── Email Templates ─────────────────────────────────
+
+  console.log("Creating default email templates...");
+
+  const emailTemplates = [
+    {
+      name: "Payment Reminder",
+      subject: "Payment Reminder for {{resident_name}}'s Care",
+      body: "Dear {{contact_name}},\n\nThis is a friendly reminder that a payment of {{amount_due}} for {{resident_name}}'s care at {{facility_name}} is due on {{due_date}}.\n\nYou can view the full billing details and make a payment through our family portal:\n{{portal_link}}\n\nIf you have already sent your payment, please disregard this notice.\n\nWarm regards,\n{{facility_name}} Billing Team",
+      type: "PAYMENT_REMINDER" as const,
+      isDefault: true,
+    },
+    {
+      name: "Overdue Notice",
+      subject: "Important: Overdue Balance for {{resident_name}}",
+      body: "Dear {{contact_name}},\n\nWe are writing to inform you that the payment of {{amount_due}} for {{resident_name}}'s care at {{facility_name}} is now past due. The original due date was {{due_date}}.\n\nWe understand that circumstances may arise, and we are here to help. Please contact us to discuss payment options.\n\nView your account: {{portal_link}}\n\nSincerely,\n{{facility_name}} Billing Department",
+      type: "OVERDUE_NOTICE" as const,
+      isDefault: true,
+    },
+    {
+      name: "Payment Plan Offer",
+      subject: "Payment Plan Options for {{resident_name}}'s Account",
+      body: "Dear {{contact_name}},\n\nWe understand that managing care expenses can be challenging. We'd like to offer flexible payment plan options for {{resident_name}}'s outstanding balance of {{amount_due}} at {{facility_name}}.\n\nOur available plans include:\n- Monthly installments over 3 months\n- Bi-weekly payments over 6 weeks\n- Custom arrangements\n\nVisit: {{portal_link}}\n\nBest regards,\n{{facility_name}} Billing Team",
+      type: "PAYMENT_PLAN_OFFER" as const,
+      isDefault: true,
+    },
+    {
+      name: "Rate Adjustment Notification",
+      subject: "Care Rate Update for {{resident_name}}",
+      body: "Dear {{contact_name}},\n\nWe are writing to inform you of an adjustment to {{resident_name}}'s care rate at {{facility_name}}.\n\nBased on the most recent care assessment, the new monthly rate will be {{amount_due}}, effective {{due_date}}.\n\nRoom: {{room_number}}, Care Level: {{care_level}}.\n\nFor details: {{portal_link}}\n\nRespectfully,\n{{facility_name}} Care Team",
+      type: "RATE_ADJUSTMENT" as const,
+      isDefault: true,
+    },
+  ];
+
+  for (const tmpl of emailTemplates) {
+    await prisma.emailTemplate.create({
+      data: { ...tmpl, organizationId: org.id },
+    });
+  }
+
+  // ── Family Portal Tokens ───────────────────────────
+
+  console.log("Creating family portal tokens...");
+
+  // Create tokens for first 10 residents so we have demo portal links
+  const portalResidents = allResidents.slice(0, 10);
+  const familyTokens: string[] = [];
+
+  for (const resident of portalResidents) {
+    const token = randomBytes(32).toString("hex");
+    familyTokens.push(token);
+    await prisma.familyPortalToken.create({
+      data: {
+        token,
+        residentId: resident.id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      },
+    });
+  }
+
+  console.log(`  Sample portal URL: /family/${familyTokens[0]}`);
+
+  // ── Update Communication Logs with Analytics Fields ──
+
+  console.log("Updating communication logs with analytics data...");
+
+  const allComms = await prisma.communicationLog.findMany();
+  for (const comm of allComms) {
+    // Simulate open/click rates
+    const wasOpened = Math.random() < 0.65; // 65% open rate
+    const wasClicked = wasOpened && Math.random() < 0.45; // 45% of opens clicked
+
+    await prisma.communicationLog.update({
+      where: { id: comm.id },
+      data: {
+        openedAt: wasOpened ? new Date(new Date(comm.sentAt).getTime() + randomInt(1, 48) * 3600000) : null,
+        clickedAt: wasClicked ? new Date(new Date(comm.sentAt).getTime() + randomInt(2, 72) * 3600000) : null,
+      },
+    });
+  }
+
   // ── Summary ────────────────────────────────────────
 
   const totalResidents = await prisma.resident.count();
@@ -454,6 +540,8 @@ async function main() {
   const totalMismatches = await prisma.revenueMismatch.count();
   const totalRules = await prisma.reminderRule.count();
   const totalComms = await prisma.communicationLog.count();
+  const totalTemplates = await prisma.emailTemplate.count();
+  const totalTokens = await prisma.familyPortalToken.count();
 
   console.log("\n✅ Seed complete!");
   console.log(`   Residents:           ${totalResidents}`);
@@ -462,7 +550,10 @@ async function main() {
   console.log(`   Revenue mismatches:  ${totalMismatches}`);
   console.log(`   Reminder rules:      ${totalRules}`);
   console.log(`   Communication logs:  ${totalComms}`);
+  console.log(`   Email templates:     ${totalTemplates}`);
+  console.log(`   Family portal tokens: ${totalTokens}`);
   console.log(`\n   Login: admin@sunrisecare.com / admin123`);
+  console.log(`   Sample portal: /family/${familyTokens[0]}`);
 }
 
 main()

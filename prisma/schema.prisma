@@ -83,9 +83,10 @@ model Organization {
   type      OrganizationType
   createdAt DateTime         @default(now())
 
-  facilities    Facility[]
-  users         User[]
-  reminderRules ReminderRule[]
+  facilities     Facility[]
+  users          User[]
+  reminderRules  ReminderRule[]
+  emailTemplates EmailTemplate[]
 }
 
 model Facility {
@@ -135,10 +136,12 @@ model Resident {
   contactPhone String?
   contactEmail String?
 
-  carePlanChanges    CarePlanChange[]
-  billingRecords     BillingRecord[]
-  revenueMismatches  RevenueMismatch[]
-  communicationLogs  CommunicationLog[]
+  carePlanChanges        CarePlanChange[]
+  billingRecords         BillingRecord[]
+  revenueMismatches      RevenueMismatch[]
+  communicationLogs      CommunicationLog[]
+  familyPortalTokens     FamilyPortalToken[]
+  communicationSchedules CommunicationSchedule[]
 }
 
 model CarePlanChange {
@@ -212,6 +215,8 @@ model ReminderRule {
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+
+  communicationSchedules CommunicationSchedule[]
 }
 
 model CommunicationLog {
@@ -225,9 +230,84 @@ model CommunicationLog {
   sentAt      DateTime            @default(now())
   respondedAt DateTime?
 
+  // Analytics fields
+  openedAt    DateTime?
+  clickedAt   DateTime?
+  templateId  String?
+
   residentId String
   resident   Resident @relation(fields: [residentId], references: [id])
 
   billingRecordId String?
   billingRecord   BillingRecord? @relation(fields: [billingRecordId], references: [id])
+
+  emailTemplate   EmailTemplate? @relation(fields: [templateId], references: [id])
+}
+
+// ── Email Templates ────────────────────────────────────
+
+enum EmailTemplateType {
+  PAYMENT_REMINDER
+  OVERDUE_NOTICE
+  PAYMENT_PLAN_OFFER
+  RATE_ADJUSTMENT
+  CUSTOM
+}
+
+model EmailTemplate {
+  id        String            @id @default(cuid())
+  name      String
+  subject   String
+  body      String
+  type      EmailTemplateType
+  isDefault Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  communicationLogs      CommunicationLog[]
+  communicationSchedules CommunicationSchedule[]
+}
+
+// ── Family Portal ──────────────────────────────────────
+
+model FamilyPortalToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  residentId String
+  resident   Resident @relation(fields: [residentId], references: [id])
+}
+
+// ── Communication Schedule ─────────────────────────────
+
+enum ScheduleStatus {
+  PENDING
+  SENT
+  CANCELLED
+}
+
+model CommunicationSchedule {
+  id          String         @id @default(cuid())
+  scheduledAt DateTime
+  status      ScheduleStatus @default(PENDING)
+  channel     ReminderChannel
+  subject     String
+  message     String
+  createdAt   DateTime       @default(now())
+  sentAt      DateTime?
+
+  residentId  String
+  resident    Resident @relation(fields: [residentId], references: [id])
+
+  templateId  String?
+  template    EmailTemplate? @relation(fields: [templateId], references: [id])
+
+  ruleId      String?
+  rule        ReminderRule?  @relation(fields: [ruleId], references: [id])
 }

@@ -29,6 +29,7 @@ const BUCKET_LABELS: Record<string, string> = {
 
 const BUCKET_COLORS = ["#22c55e", "#eab308", "#f97316", "#ef4444", "#991b1b"];
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
@@ -74,7 +75,7 @@ export default function ARAgingChart({ data }: { data: AgingData }) {
       <div className="p-6">
         {/* Summary Row */}
         <div className="mb-6 grid grid-cols-5 gap-3">
-          {chartData.map((bucket, i) => (
+          {chartData.map((bucket) => (
             <div key={bucket.name} className="rounded-lg bg-slate-50 p-3 text-center">
               <div
                 className="mx-auto mb-2 h-1.5 w-8 rounded-full"
