@@ -55,6 +55,26 @@ enum MismatchStatus {
   DISMISSED
 }
 
+enum ReminderChannel {
+  EMAIL
+  SMS
+  PHONE
+  LETTER
+}
+
+enum ReminderAction {
+  SEND_REMINDER
+  ESCALATE
+  COLLECTIONS
+}
+
+enum CommunicationStatus {
+  SENT
+  DELIVERED
+  FAILED
+  RESPONDED
+}
+
 // ── Organization & Facility ────────────────────────────
 
 model Organization {
@@ -63,8 +83,9 @@ model Organization {
   type      OrganizationType
   createdAt DateTime         @default(now())
 
-  facilities Facility[]
-  users      User[]
+  facilities    Facility[]
+  users         User[]
+  reminderRules ReminderRule[]
 }
 
 model Facility {
@@ -110,9 +131,14 @@ model Resident {
   facilityId String
   facility   Facility @relation(fields: [facilityId], references: [id])
 
-  carePlanChanges   CarePlanChange[]
-  billingRecords    BillingRecord[]
-  revenueMismatches RevenueMismatch[]
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
+
+  carePlanChanges    CarePlanChange[]
+  billingRecords     BillingRecord[]
+  revenueMismatches  RevenueMismatch[]
+  communicationLogs  CommunicationLog[]
 }
 
 model CarePlanChange {
@@ -144,7 +170,8 @@ model BillingRecord {
   residentId String
   resident   Resident @relation(fields: [residentId], references: [id])
 
-  revenueMismatches RevenueMismatch[]
+  revenueMismatches  RevenueMismatch[]
+  communicationLogs  CommunicationLog[]
 }
 
 // ── Revenue Mismatch Detection ─────────────────────────
@@ -168,4 +195,39 @@ model RevenueMismatch {
 
   billingRecordId  String
   billingRecord    BillingRecord @relation(fields: [billingRecordId], references: [id])
+}
+
+// ── Accounts Receivable ────────────────────────────────
+
+model ReminderRule {
+  id             String         @id @default(cuid())
+  name           String
+  daysOverdue    Int
+  channel        ReminderChannel
+  action         ReminderAction
+  messageTemplate String?
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model CommunicationLog {
+  id          String              @id @default(cuid())
+  channel     ReminderChannel
+  action      ReminderAction
+  subject     String
+  message     String
+  status      CommunicationStatus @default(SENT)
+  response    String?
+  sentAt      DateTime            @default(now())
+  respondedAt DateTime?
+
+  residentId String
+  resident   Resident @relation(fields: [residentId], references: [id])
+
+  billingRecordId String?
+  billingRecord   BillingRecord? @relation(fields: [billingRecordId], references: [id])
 }

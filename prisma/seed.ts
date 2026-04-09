@@ -72,6 +72,8 @@ const CARE_STAFF = [
 
 async function main() {
   console.log("Cleaning existing data...");
+  await prisma.communicationLog.deleteMany();
+  await prisma.reminderRule.deleteMany();
   await prisma.revenueMismatch.deleteMany();
   await prisma.billingRecord.deleteMany();
   await prisma.carePlanChange.deleteMany();
@@ -153,6 +155,11 @@ async function main() {
       const admissionDaysAgo = randomInt(30, 1200);
       const status: ResidentStatus = admissionDaysAgo > 900 && Math.random() < 0.05 ? "DISCHARGED" : "ACTIVE";
 
+      const contactFirstNames = ["Michael", "Jennifer", "David", "Sarah", "James", "Lisa", "Robert", "Karen"];
+      const contactRelation = ["son", "daughter", "spouse", "niece", "nephew"];
+      const cFirst = randomItem(contactFirstNames);
+      const cRel = randomItem(contactRelation);
+
       const resident = await prisma.resident.create({
         data: {
           firstName,
@@ -164,6 +171,9 @@ async function main() {
           monthlyRate: (monthlyRate),
           paymentType: randomItem(paymentTypes),
           status,
+          contactName: `${cFirst} ${lastName} (${cRel})`,
+          contactPhone: `(512) ${randomInt(200, 999)}-${String(randomInt(1000, 9999))}`,
+          contactEmail: `${cFirst.toLowerCase()}.${lastName.toLowerCase()}@email.com`,
         },
       });
 
@@ -347,18 +357,111 @@ async function main() {
     });
   }
 
+  // ── Default Reminder Rules ──────────────────────────
+
+  console.log("Creating default reminder rules...");
+  await prisma.reminderRule.deleteMany();
+
+  const reminderRules = [
+    { name: "7-Day Email Reminder", daysOverdue: 7, channel: "EMAIL" as const, action: "SEND_REMINDER" as const, messageTemplate: "Dear {contact_name}, this is a friendly reminder that payment of {amount} for {resident_name}'s care at {facility_name} was due on {due_date}. Please remit payment at your earliest convenience." },
+    { name: "14-Day SMS Follow-up", daysOverdue: 14, channel: "SMS" as const, action: "SEND_REMINDER" as const, messageTemplate: "Sunrise Senior Care: Payment of {amount} for {resident_name} is 14 days overdue. Please contact billing at (512) 555-0100." },
+    { name: "30-Day Phone Call", daysOverdue: 30, channel: "PHONE" as const, action: "ESCALATE" as const, messageTemplate: "Phone call scheduled to discuss overdue balance of {amount} for {resident_name}." },
+    { name: "60-Day Escalation Letter", daysOverdue: 60, channel: "LETTER" as const, action: "ESCALATE" as const, messageTemplate: "Formal notice of overdue balance for {resident_name}. Amount: {amount}. Due date: {due_date}. Please contact us immediately." },
+    { name: "90-Day Collections", daysOverdue: 90, channel: "EMAIL" as const, action: "COLLECTIONS" as const, messageTemplate: "Final notice: Account for {resident_name} ({amount}) will be referred to collections if not resolved within 10 business days." },
+  ];
+
+  for (const rule of reminderRules) {
+    await prisma.reminderRule.create({
+      data: { ...rule, organizationId: org.id },
+    });
+  }
+
+  // ── Communication Log (sample entries for overdue invoices) ──
+
+  console.log("Creating sample communication logs...");
+
+  const overdueRecords = await prisma.billingRecord.findMany({
+    where: { paymentStatus: { in: ["OVERDUE", "PARTIAL"] } },
+    include: { resident: true },
+    take: 15,
+  });
+
+  const commSubjects = [
+    "Payment Reminder — {amount} Due",
+    "Overdue Balance Notice",
+    "Follow-up: Outstanding Payment",
+    "Second Notice: Payment Required",
+  ];
+
+  for (const record of overdueRecords) {
+    const dueDate = new Date(record.dueDate);
+    const daysOverdue = Math.floor((Date.now() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    // First reminder at ~7 days
+    if (daysOverdue >= 7) {
+      await prisma.communicationLog.create({
+        data: {
+          residentId: record.residentId,
+          billingRecordId: record.id,
+          channel: "EMAIL",
+          action: "SEND_REMINDER",
+          subject: `Payment Reminder — $${Number(record.amountBilled).toLocaleString()} Due`,
+          message: `Sent automated email reminder for invoice due ${dueDate.toISOString().split("T")[0]}.`,
+          status: Math.random() < 0.8 ? "DELIVERED" : "SENT",
+          sentAt: new Date(dueDate.getTime() + 7 * 86400000),
+        },
+      });
+    }
+
+    // Second reminder at ~14 days
+    if (daysOverdue >= 14 && Math.random() < 0.6) {
+      await prisma.communicationLog.create({
+        data: {
+          residentId: record.residentId,
+          billingRecordId: record.id,
+          channel: "SMS",
+          action: "SEND_REMINDER",
+          subject: `SMS Follow-up — $${Number(record.amountBilled).toLocaleString()}`,
+          message: `Sent SMS to ${record.resident.contactPhone || "N/A"} regarding overdue balance.`,
+          status: "DELIVERED",
+          sentAt: new Date(dueDate.getTime() + 14 * 86400000),
+        },
+      });
+    }
+
+    // Escalation at ~30 days
+    if (daysOverdue >= 30 && Math.random() < 0.3) {
+      await prisma.communicationLog.create({
+        data: {
+          residentId: record.residentId,
+          billingRecordId: record.id,
+          channel: "PHONE",
+          action: "ESCALATE",
+          subject: `Phone Escalation — ${record.resident.firstName} ${record.resident.lastName}`,
+          message: `Called ${record.resident.contactName || "family contact"} regarding overdue balance. Left voicemail.`,
+          status: "SENT",
+          sentAt: new Date(dueDate.getTime() + 30 * 86400000),
+        },
+      });
+    }
+  }
+
   // ── Summary ────────────────────────────────────────
 
   const totalResidents = await prisma.resident.count();
   const totalBilling = await prisma.billingRecord.count();
   const totalChanges = await prisma.carePlanChange.count();
   const totalMismatches = await prisma.revenueMismatch.count();
+  const totalRules = await prisma.reminderRule.count();
+  const totalComms = await prisma.communicationLog.count();
 
   console.log("\n✅ Seed complete!");
-  console.log(`   Residents:         ${totalResidents}`);
-  console.log(`   Billing records:   ${totalBilling}`);
-  console.log(`   Care plan changes: ${totalChanges}`);
-  console.log(`   Revenue mismatches: ${totalMismatches}`);
+  console.log(`   Residents:           ${totalResidents}`);
+  console.log(`   Billing records:     ${totalBilling}`);
+  console.log(`   Care plan changes:   ${totalChanges}`);
+  console.log(`   Revenue mismatches:  ${totalMismatches}`);
+  console.log(`   Reminder rules:      ${totalRules}`);
+  console.log(`   Communication logs:  ${totalComms}`);
   console.log(`\n   Login: admin@sunrisecare.com / admin123`);
 }
 
