@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { randomBytes } from "crypto";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { DEMO_ORG_NAME } from "@/lib/demo";
 
 // POST — generate a family portal token for a resident (authenticated)
 export async function POST(req: NextRequest) {
@@ -46,7 +47,13 @@ export async function GET(req: NextRequest) {
     include: {
       resident: {
         include: {
-          facility: { select: { name: true, address: true } },
+          facility: {
+            select: {
+              name: true,
+              address: true,
+              organization: { select: { name: true } },
+            },
+          },
           billingRecords: {
             orderBy: { billingMonth: "desc" },
             take: 12,
@@ -100,6 +107,8 @@ export async function GET(req: NextRequest) {
     dueDate: new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 15),
   });
 
+  const isDemo = resident.facility.organization.name === DEMO_ORG_NAME;
+
   return NextResponse.json({
     resident: {
       name: `${resident.firstName} ${resident.lastName}`,
@@ -113,5 +122,6 @@ export async function GET(req: NextRequest) {
     paymentHistory,
     upcomingCharges,
     tokenExpiresAt: portalToken.expiresAt,
+    isDemo,
   });
 }

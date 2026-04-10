@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import DemoBadge from "@/components/DemoBadge";
 
 interface FamilyData {
   resident: {
@@ -28,6 +29,7 @@ interface FamilyData {
     dueDate: string;
   }>;
   tokenExpiresAt: string;
+  isDemo?: boolean;
 }
 
 const CARE_LEVEL_LABELS: Record<string, string> = {
@@ -105,6 +107,8 @@ export default function FamilyPortalPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {data.isDemo && <DemoBadge />}
+
       {/* Pay Now Modal (Simulated) */}
       {showPayModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
